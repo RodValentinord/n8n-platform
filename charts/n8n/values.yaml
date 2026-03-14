@@ -1,0 +1,188 @@
+# ──────────────────────────────────────────────
+# n8n Helm Chart — Default Values
+# Stack: K3s (Oracle Cloud Always Free) + Cloudflare + Nginx Ingress
+# ──────────────────────────────────────────────
+
+global:
+  environment: prod
+  image:
+    repository: n8nio/n8n
+    tag: "1.47.1"
+    pullPolicy: IfNotPresent
+
+  # Domínio público — proxy Cloudflare + cert-manager
+  host: n8n.rvalentino.com
+  protocol: https
+
+# ──────────────────────────────────────────────
+# Namespace
+# ──────────────────────────────────────────────
+namespace: n8n
+
+# ──────────────────────────────────────────────
+# Service Account
+# ──────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: n8n-sa
+  annotations: {}
+
+# ──────────────────────────────────────────────
+# n8n shared config (ConfigMap)
+# ──────────────────────────────────────────────
+config:
+  database:
+    type: postgresdb
+    # In-cluster PostgreSQL — service name do release bitnami/postgresql
+    # Ajustar para o hostname real após helm install bitnami/postgresql
+    host: "n8n-postgresql"
+    port: "5432"
+    name: n8n
+  redis:
+    # In-cluster Redis — service name do release bitnami/redis
+    host: "n8n-redis-master"
+    port: "6379"
+  executions:
+    mode: queue
+    pruneEnabled: "true"
+    pruneMaxAge: "48"
+    pruneMaxCount: "50000"
+  # queue mode: "database" armazena binários no PostgreSQL (workers não têm acesso ao FS do main)
+  binaryDataMode: "database"
+  performance:
+    nodeOptions: "--max-old-space-size=768"
+  metrics:
+    enabled: "true"
+
+# ──────────────────────────────────────────────
+# Secrets — referência a um Secret já existente ou criado pelo chart
+# ──────────────────────────────────────────────
+existingSecret: ""  # se definido, usa um Secret externo
+
+secrets:
+  # Usados apenas se existingSecret estiver vazio.
+  # Em produção, injetar via sealed-secrets ou external-secrets.
+  dbUser: ""
+  dbPassword: ""
+  redisPassword: ""
+  encryptionKey: ""   # 32+ chars — CRÍTICO: fazer backup desta chave
+  apiKey: ""          # opcional — usado pelo CronJob de backup
+
+# ──────────────────────────────────────────────
+# Service Annotations (aplicadas a todos os Services)
+# Vazio: sem NEG nem anotações cloud-específicas para Nginx Ingress
+# ──────────────────────────────────────────────
+serviceAnnotations: {}
+
+# ──────────────────────────────────────────────
+# Pod Annotations extras (Prometheus scrape já está no template)
+# ──────────────────────────────────────────────
+podAnnotations: {}
+
+# ──────────────────────────────────────────────
+# n8n Main (UI + API + Scheduler)
+# ──────────────────────────────────────────────
+main:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  terminationGracePeriodSeconds: 60
+  probes:
+    readiness:
+      initialDelaySeconds: 10
+      periodSeconds: 5
+    liveness:
+      initialDelaySeconds: 30
+      periodSeconds: 15
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# ──────────────────────────────────────────────
+# n8n Webhook (HTTP trigger handler)
+# ──────────────────────────────────────────────
+webhook:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  terminationGracePeriodSeconds: 30
+  probes:
+    readiness:
+      initialDelaySeconds: 10
+      periodSeconds: 5
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# ──────────────────────────────────────────────
+# n8n Worker (workflow execution)
+# ──────────────────────────────────────────────
+worker:
+  replicas: 2
+  concurrency: 5
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  terminationGracePeriodSeconds: 120
+  probes:
+    readiness:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    liveness:
+      initialDelaySeconds: 30
+      periodSeconds: 15
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 75
+    targetMemoryUtilization: 75
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      maxPodsPerPeriod: 1
+      periodSeconds: 120
+
+# ──────────────────────────────────────────────
+# Ingress — Nginx Ingress Controller + cert-manager
+# ──────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: "nginx"
+  tls:
+    secretName: n8n-tls
+  # Restringe acesso aos IPs da Cloudflare (proteção anti-bypass do WAF).
+  # Deixar vazio durante bootstrap; preencher após cluster estabilizar.
+  # Referência: https://www.cloudflare.com/ips-v4
+  whitelistSourceRange: ""
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+# ──────────────────────────────────────────────
+# Workflow Backup CronJob — OCI Object Storage
+# Usa Pre-Authenticated Request (PAR) URL: nenhuma credencial necessária no pod.
+# Crie o PAR em: OCI Console > Object Storage > bucket > Pre-Authenticated Requests
+# ──────────────────────────────────────────────
+backup:
+  enabled: false
+  schedule: "0 2 * * *"   # diário às 02:00 UTC
+  image: curlimages/curl:8.5.0
+  # PAR URL do bucket OCI — CREDENCIAL DE ESCRITA, não comitar valor real.
+  # Injetar via sealed-secrets, external-secrets, ou --set backup.parUrl=<url> no deploy.
+  # Formato: https://<namespace>.compat.objectstorage.<region>.oraclecloud.com/p/<token>/n/<ns>/b/<bucket>/o/
+  parUrl: ""

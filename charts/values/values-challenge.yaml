@@ -1,13 +1,29 @@
-# values-challenge.yaml — resource profile for the 24 GB RAM Oracle Cloud cluster
-# Apply with: helm upgrade n8n ./charts/n8n -f charts/values/values-challenge.yaml
+# values-challenge.yaml — overrides para o cluster Oracle Cloud Always Free (24 GB RAM)
+# Uso: helm upgrade --install n8n ./charts/n8n \
+#        -n n8n --create-namespace \
+#        -f charts/values/values-challenge.yaml
 
 global:
-  domain: "TODO: your-domain.example.com"   # Cloudflare proxied domain
-  imageTag: "1.47.1"                         # TODO: pin to tested version
+  environment: prod
+  image:
+    tag: "1.47.1"
+  host: n8n.rvalentino.com
+  protocol: https
 
-# ── n8n Main ──────────────────────────────────────────────────────────────
+namespace: n8n
+
+config:
+  database:
+    # Service name do release: helm install n8n-postgresql bitnami/postgresql
+    host: "n8n-postgresql"
+    name: "n8n"
+  redis:
+    # Service name do release: helm install n8n-redis bitnami/redis
+    host: "n8n-redis-master"
+
+# ── n8n Main ──────────────────────────────────────────────────────────────────
 main:
-  replicaCount: 2
+  replicas: 2
   resources:
     requests:
       cpu: "250m"
@@ -15,20 +31,14 @@ main:
     limits:
       cpu: "1000m"
       memory: "1Gi"
-  ingress:
+  podDisruptionBudget:
     enabled: true
-    className: nginx
-    annotations:
-      cert-manager.io/cluster-issuer: "letsencrypt-prod"
-      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    tls:
-      - secretName: n8n-tls
-        hosts:
-          - "TODO: your-domain.example.com"
+    minAvailable: 1
 
-# ── n8n Webhook ───────────────────────────────────────────────────────────
+# ── n8n Webhook ───────────────────────────────────────────────────────────────
 webhook:
-  replicaCount: 2
+  enabled: true
+  replicas: 2
   resources:
     requests:
       cpu: "150m"
@@ -36,51 +46,49 @@ webhook:
     limits:
       cpu: "500m"
       memory: "512Mi"
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
 
-# ── n8n Worker ────────────────────────────────────────────────────────────
+# ── n8n Worker ────────────────────────────────────────────────────────────────
 worker:
-  replicaCount: 2
+  replicas: 2
+  concurrency: 5
   resources:
     requests:
       cpu: "500m"
       memory: "512Mi"
     limits:
-      cpu: "2000m"
-      memory: "2Gi"
+      cpu: "1500m"
+      memory: "1536Mi"
   autoscaling:
     enabled: true
     minReplicas: 2
-    maxReplicas: 6
-    targetCPUUtilizationPercentage: 70
+    maxReplicas: 4
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      maxPodsPerPeriod: 1
+      periodSeconds: 120
 
-# ── PostgreSQL ────────────────────────────────────────────────────────────
-postgresql:
+# ── Ingress (Nginx + cert-manager + Cloudflare) ───────────────────────────────
+ingress:
   enabled: true
-  primary:
-    resources:
-      requests:
-        cpu: "250m"
-        memory: "512Mi"
-      limits:
-        cpu: "1000m"
-        memory: "1Gi"
-    persistence:
-      enabled: true
-      size: 20Gi
+  className: nginx
+  tls:
+    secretName: n8n-tls
+  # Após cluster estabilizar, substituir por IPs oficiais da Cloudflare:
+  # https://www.cloudflare.com/ips-v4
+  whitelistSourceRange: ""
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 
-# ── Redis ─────────────────────────────────────────────────────────────────
-redis:
-  enabled: true
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "256Mi"
-    limits:
-      cpu: "500m"
-      memory: "512Mi"
-
-# ── Prometheus metrics annotations ────────────────────────────────────────
-podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/port: "5678"
-  prometheus.io/path: "/metrics"
+# ── Backup ────────────────────────────────────────────────────────────────────
+# Habilitar após provisionar o bucket OCI e criar a PAR URL.
+# Ver: MEMORIA/memoria.md > Pendências
+backup:
+  enabled: false
+  # parUrl é credencial de escrita — injetar via --set backup.parUrl=<url> ou sealed-secrets.
+  parUrl: ""

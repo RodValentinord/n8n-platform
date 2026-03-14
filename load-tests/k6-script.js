@@ -12,7 +12,7 @@ import http from "k6/http";
 import { check, sleep } from "k6";
 import { Rate } from "k6/metrics";
 
-const BASE_URL = __ENV.BASE_URL || "https://TODO-your-domain.example.com";
+const BASE_URL = __ENV.BASE_URL || "https://n8n.rvalentino.com";
 const WEBHOOK_PATH = __ENV.WEBHOOK_PATH || "/webhook/test-endpoint"; // TODO: set real path
 
 const errorRate = new Rate("errors");

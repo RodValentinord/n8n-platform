@@ -31,7 +31,10 @@ spec:
           address: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
           query: |
             histogram_quantile(0.99,
-              sum(rate(http_request_duration_seconds_bucket{app="n8n"}[2m])) by (le)
+              sum(rate(http_request_duration_seconds_bucket{
+                namespace="n8n",
+                pod=~".*-main-.*|.*-webhook-.*"
+              }[2m])) by (le)
             )
       successCondition: result[0] < 0.5    # p99 < 500 ms
 

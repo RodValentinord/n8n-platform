@@ -1,0 +1,75 @@
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "n8n.fullname" . }}-ingress
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # service-upstream: "true" faz o Nginx usar o ClusterIP do Service em vez
+    # de fazer round-robin direto nos IPs dos pods. Necessário para Argo Rollouts
+    # controlar o traffic splitting corretamente via peso no Service.
+    nginx.ingress.kubernetes.io/service-upstream: "true"
+    {{- if .Values.ingress.whitelistSourceRange }}
+    # Restringe acesso aos IPs da Cloudflare — impede bypass do WAF.
+    # Preencher com os ranges oficiais: https://www.cloudflare.com/ips-v4
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ .Values.ingress.whitelistSourceRange | quote }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- if .Values.ingress.tls.secretName }}
+  # CORREÇÃO: TLS agora condicional — evita erro 500 se o cert-manager
+  # ainda não emitiu o certificado (secret inexistente).
+  # Nos primeiros minutos após o deploy, o ingress sobe sem TLS e o
+  # Cloudflare (modo Full) já garante HTTPS para o usuário final.
+  tls:
+    - hosts:
+        - {{ .Values.global.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.host }}
+      http:
+        paths:
+          {{- if .Values.webhook.enabled }}
+          # /webhook e /webhook-rest → processo webhook dedicado
+          # Isola webhooks de produção do processo main, permitindo escala independente.
+          - path: /webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "n8n.fullname" . }}-webhook
+                port:
+                  number: 80
+          - path: /webhook-rest
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "n8n.fullname" . }}-webhook
+                port:
+                  number: 80
+          # /webhook-test → main (usado pelo editor da UI para testar workflows)
+          # pathType: Prefix cobre automaticamente /webhook-test/{uuid} — regex desnecessário.
+          - path: /webhook-test
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "n8n.fullname" . }}-main
+                port:
+                  number: 80
+          {{- end }}
+          # / → main (catch-all: UI + API REST + /rest/*)
+          # Deve ser sempre a última regra — Nginx avalia por ordem de especificidade.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "n8n.fullname" . }}-main
+                port:
+                  number: 80
+{{- end }}

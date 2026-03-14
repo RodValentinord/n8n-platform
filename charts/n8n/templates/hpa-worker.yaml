@@ -1,0 +1,59 @@
+{{/*
+Pré-requisito: Argo Rollouts instalado com metrics server habilitado.
+Sem o metrics adapter do Argo Rollouts, o HPA não consegue ler o número
+de réplicas do Rollout e ficará em estado Unknown.
+
+Garantir no values do argo-rollouts:
+  controller.metrics.enabled: true
+  metricServer.enabled: true
+
+Melhoria futura: adicionar métrica externa de fila Redis via Prometheus Adapter.
+A profundidade da fila (bull queue length) é o indicador mais direto de carga
+do worker — CPU pode estar baixa enquanto dezenas de jobs aguardam execução.
+*/}}
+{{- if .Values.worker.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "n8n.fullname" . }}-worker
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: {{ include "n8n.fullname" . }}-worker
+  minReplicas: {{ .Values.worker.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.worker.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.worker.autoscaling.targetCPUUtilization }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.worker.autoscaling.targetMemoryUtilization }}
+  behavior:
+    # scaleUp conservador: máximo 1 pod por vez a cada 60s.
+    # Evita explosão de pods em cluster free tier (24 GB RAM total).
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    # scaleDown com janela longa: evita matar workers com jobs em andamento.
+    # stabilizationWindowSeconds deve ser maior que N8N_GRACEFUL_SHUTDOWN_TIMEOUT (110s).
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.worker.autoscaling.scaleDown.stabilizationWindowSeconds }}
+      policies:
+        - type: Pods
+          value: {{ .Values.worker.autoscaling.scaleDown.maxPodsPerPeriod }}
+          periodSeconds: {{ .Values.worker.autoscaling.scaleDown.periodSeconds }}
+{{- end }}

@@ -69,17 +69,18 @@ jobs:
             --namespace ${{ env.NAMESPACE }} \
             --create-namespace \
             -f charts/values/values-challenge.yaml \
-            --set global.imageTag=${{ github.sha }} \
+            --set global.image.tag=${{ github.sha }} \
             --wait \
             --timeout 5m
 
-      - name: Trigger Argo Rollouts canary
+      - name: Install Argo Rollouts plugin
         run: |
-          # TODO: Install argo rollouts kubectl plugin in runner or use API
-          kubectl argo rollouts set image n8n-main \
-            n8n=n8nio/n8n:${{ github.sha }} \
-            -n ${{ env.NAMESPACE }}
+          curl -LO https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64
+          chmod +x kubectl-argo-rollouts-linux-amd64
+          sudo mv kubectl-argo-rollouts-linux-amd64 /usr/local/bin/kubectl-argo-rollouts
 
       - name: Watch rollout status
         run: |
           kubectl argo rollouts status n8n-main -n ${{ env.NAMESPACE }} --timeout 10m
+          kubectl argo rollouts status n8n-webhook -n ${{ env.NAMESPACE }} --timeout 5m
+          kubectl argo rollouts status n8n-worker -n ${{ env.NAMESPACE }} --timeout 5m

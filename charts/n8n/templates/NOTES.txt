@@ -1,0 +1,34 @@
+──────────────────────────────────────────────
+  n8n deployed successfully!
+──────────────────────────────────────────────
+
+Environment: {{ .Values.global.environment }}
+Version:     {{ .Values.global.image.tag }}
+Host:        https://{{ .Values.global.host }}
+
+Components:
+  ✔ n8n-main    ({{ .Values.main.replicas }} replicas)
+{{- if .Values.webhook.enabled }}
+  ✔ n8n-webhook ({{ .Values.webhook.replicas }} replicas)
+{{- end }}
+  ✔ n8n-worker  ({{ .Values.worker.replicas }} replicas, HPA={{ .Values.worker.autoscaling.enabled }})
+
+Acesse a UI:
+  https://{{ .Values.global.host }}
+
+Ou via port-forward:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "n8n.fullname" . }}-main 5678:80
+  Abra: http://localhost:5678
+
+Verificar pods:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of=n8n
+
+Verificar saúde:
+  kubectl -n {{ .Release.Namespace }} exec rollout/{{ include "n8n.fullname" . }}-main -- wget -qO- http://localhost:5678/healthz
+
+Logs:
+  kubectl -n {{ .Release.Namespace }} logs rollout/{{ include "n8n.fullname" . }}-main --tail=50
+  kubectl -n {{ .Release.Namespace }} logs rollout/{{ include "n8n.fullname" . }}-worker --tail=50
+
+⚠ CRÍTICO: Faça backup da N8N_ENCRYPTION_KEY.
+   Perder esta chave torna todas as credenciais armazenadas irrecuperáveis.

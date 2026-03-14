@@ -1,0 +1,86 @@
+{{/*
+Backup diário de workflows via n8n API → OCI Object Storage
+
+Pré-requisito: criar uma Pre-Authenticated Request (PAR) URL no OCI:
+  OCI Console > Object Storage > bucket > Pre-Authenticated Requests > Create
+  Tipo: Permits object writes, sem expiração (ou longa duração)
+
+Preencher backup.parUrl em values-challenge.yaml após provisionar o bucket.
+ATENÇÃO: o PAR URL deve ser armazenado no Secret (backup.parUrlSecretKey),
+não diretamente nos values — é uma URL assinada com permissão de escrita.
+
+Pré-requisito adicional: N8N_API_KEY configurado no secret (secrets.apiKey)
+para autenticar na API REST do n8n.
+*/}}
+{{- if .Values.backup.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "n8n.fullname" . }}-workflow-backup
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "n8n.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: {{ .Values.backup.image }}
+              # Limites conservadores: o export é só JSON de workflows,
+              # não deve passar de poucos MB mesmo com centenas de workflows.
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "200m"
+                  memory: "128Mi"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  DATE=$(date +%Y-%m-%d-%H%M)
+                  EXPORT_FILE="/tmp/workflows-${DATE}.json"
+
+                  echo "Exportando workflows via n8n API..."
+                  # --max-time 30: aborta se o n8n não responder em 30s
+                  # A URL usa o nome do Service interno do cluster (sem HTTPS — correto para comunicação intra-cluster)
+                  # Certifique-se que o Service do main está nomeado como {{ include "n8n.fullname" . }}-main
+                  curl -sf --max-time 30 \
+                    -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+                    -H "Accept: application/json" \
+                    "http://{{ include "n8n.fullname" . }}-main:5678/api/v1/workflows?limit=250" \
+                    -o "${EXPORT_FILE}"
+
+                  echo "Enviando para OCI Object Storage (PAR URL)..."
+                  # --max-time 60: upload pode ser mais lento que o export
+                  curl -sf --max-time 60 -X PUT \
+                    -H "Content-Type: application/json" \
+                    --data-binary "@${EXPORT_FILE}" \
+                    "${N8N_BACKUP_PAR_URL}workflows-${DATE}.json"
+
+                  echo "Backup concluído: workflows-${DATE}.json"
+              env:
+                - name: N8N_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "n8n.secretName" . }}
+                      key: N8N_API_KEY
+                # CORREÇÃO: PAR URL movido para o Secret.
+                # Um PAR URL é uma credencial de escrita — não deve ficar em values.yaml.
+                # Adicionar a chave "N8N_BACKUP_PAR_URL" no secret.yaml do chart.
+                - name: N8N_BACKUP_PAR_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "n8n.secretName" . }}
+                      key: N8N_BACKUP_PAR_URL
+{{- end }}

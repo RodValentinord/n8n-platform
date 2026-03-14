@@ -1,8 +1,0 @@
-# TODO: Add customized n8n Helm chart here.
-# Base chart: https://github.com/8gears/n8n-helm-chart
-# Customizations needed:
-#   - Remove GCP-specific references
-#   - Replace Datadog annotations with Prometheus scrape annotations
-#   - Split into 3 Deployments: main, webhook, worker
-#   - Add PodDisruptionBudgets for main and webhook
-#   - Configure HorizontalPodAutoscaler for worker

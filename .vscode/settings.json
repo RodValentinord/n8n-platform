@@ -1,0 +1,7 @@
+{
+  "yaml.validate": true,
+  "files.associations": {
+    "charts/**/templates/**/*.yaml": "helm",
+    "charts/**/templates/**/*.tpl": "helm"
+  }
+}

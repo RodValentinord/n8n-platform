@@ -10,3 +10,6 @@ charts/*/charts/
 
 # OS
 .DS_Store
+
+# Local memory / notes
+MEMORIA/

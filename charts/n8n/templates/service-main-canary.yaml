@@ -1,0 +1,24 @@
+{{/*
+Service canary para o Argo Rollouts Nginx traffic routing.
+O controller do Argo Rollouts gerencia os selectors deste Service automaticamente
+para apontar para os pods canary durante a progressão.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "n8n.fullname" . }}-main-canary
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+    {{- include "n8n.selectorLabels" (dict "context" . "role" "main") | nindent 4 }}
+  {{- with .Values.serviceAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "n8n.selectorLabels" (dict "context" . "role" "main") | nindent 4 }}
+  ports:
+    - port: 80
+      targetPort: 5678
+      protocol: TCP

@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "n8n.configMapName" . }}
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+data:
+  # --- Banco de dados ---
+  DB_TYPE: {{ .Values.config.database.type | quote }}
+  DB_POSTGRESDB_HOST: {{ .Values.config.database.host | quote }}
+  DB_POSTGRESDB_PORT: {{ .Values.config.database.port | toString | quote }}
+  DB_POSTGRESDB_DATABASE: {{ .Values.config.database.name | quote }}
+
+  # --- Redis / Queue ---
+  QUEUE_BULL_REDIS_HOST: {{ .Values.config.redis.host | quote }}
+  QUEUE_BULL_REDIS_PORT: {{ .Values.config.redis.port | toString | quote }}
+
+  # --- Modo de execução ---
+  # "queue" ativa o modo distribuído: main delega jobs para workers via Redis
+  EXECUTIONS_MODE: {{ .Values.config.executions.mode | quote }}
+
+  # --- Pruning de execuções ---
+  EXECUTIONS_DATA_PRUNE: {{ .Values.config.executions.pruneEnabled | quote }}
+  EXECUTIONS_DATA_MAX_AGE: {{ .Values.config.executions.pruneMaxAge | quote }}
+  EXECUTIONS_DATA_PRUNE_MAX_COUNT: {{ .Values.config.executions.pruneMaxCount | quote }}
+
+  # --- Rede e protocolo ---
+  N8N_PROTOCOL: {{ .Values.global.protocol | quote }}
+  N8N_HOST: {{ .Values.global.host | quote }}
+  N8N_PORT: "5678"
+
+  # WEBHOOK_URL é a URL base que o n8n registra externamente nos serviços de terceiros.
+  # Deve apontar para o subdomínio público, sem trailing slash duplicado.
+  WEBHOOK_URL: {{ printf "%s://%s" .Values.global.protocol .Values.global.host | trimSuffix "/" | quote }}
+
+  # --- Observabilidade ---
+  N8N_METRICS: {{ .Values.config.metrics.enabled | quote }}
+
+  # --- Performance ---
+  NODE_OPTIONS: {{ .Values.config.performance.nodeOptions | quote }}
+  N8N_DEFAULT_BINARY_DATA_MODE: {{ .Values.config.binaryDataMode | quote }}
+
+  # --- Shutdown graceful ---
+  # Deve ser ligeiramente menor que terminationGracePeriodSeconds do worker (120s)
+  # para garantir que o n8n termine jobs em andamento antes do SIGKILL do K8s.
+  N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "110"
+
+  # Nota: N8N_DISABLE_PRODUCTION_MAIN_PROCESS foi removido daqui.
+  # Essa flag só se aplica ao componente "main" e deve ser definida
+  # diretamente no env[] do rollout-main.yaml para não vazar para
+  # worker e webhook.
