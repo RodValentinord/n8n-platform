@@ -1,0 +1,27 @@
+# Custom values for loki-stack (Loki + Promtail)
+# helm upgrade --install loki grafana/loki-stack \
+#   -n monitoring -f observability/loki-values.yaml
+
+loki:
+  persistence:
+    enabled: true
+    size: 10Gi
+  config:
+    limits_config:
+      retention_period: 168h  # 7 days
+
+promtail:
+  config:
+    snippets:
+      extraScrapeConfigs: |
+        # Extra pipeline for n8n logs — parse JSON and extract workflow_id
+        - job_name: n8n
+          pipeline_stages:
+            - docker: {}
+            - json:
+                expressions:
+                  level: level
+                  workflow_id: workflowId
+            - labels:
+                level:
+                workflow_id:

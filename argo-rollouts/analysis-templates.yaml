@@ -1,0 +1,58 @@
+# AnalysisTemplate — used by the n8n main Rollout to gate canary progression.
+# Queries Prometheus to validate error rate and latency before promoting.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: n8n-canary-analysis
+  namespace: n8n
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: error-rate
+      interval: 60s
+      count: 5           # 5 successive successful measurements to pass
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
+          query: |
+            sum(rate(n8n_workflow_executions_total{status="error"}[2m]))
+            /
+            sum(rate(n8n_workflow_executions_total[2m]))
+      successCondition: result[0] < 0.05   # < 5% error rate
+
+    - name: p99-latency
+      interval: 60s
+      count: 5
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{app="n8n"}[2m])) by (le)
+            )
+      successCondition: result[0] < 0.5    # p99 < 500 ms
+
+---
+# TODO: Create a Rollout resource referencing this AnalysisTemplate.
+# Example skeleton below:
+#
+# apiVersion: argoproj.io/v1alpha1
+# kind: Rollout
+# metadata:
+#   name: n8n-main
+#   namespace: n8n
+# spec:
+#   replicas: 2
+#   strategy:
+#     canary:
+#       steps:
+#         - setWeight: 20
+#         - analysis:
+#             templates:
+#               - templateName: n8n-canary-analysis
+#         - setWeight: 50
+#         - pause: {duration: 5m}
+#         - setWeight: 100

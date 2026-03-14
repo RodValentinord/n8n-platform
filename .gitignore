@@ -1,0 +1,12 @@
+# Helm packaged charts
+*.tgz
+
+# Chart dependencies
+charts/*/charts/
+
+# Values with real secrets — use <name>-secrets.yaml locally, never commit
+*-secrets.yaml
+*-secret.yaml
+
+# OS
+.DS_Store

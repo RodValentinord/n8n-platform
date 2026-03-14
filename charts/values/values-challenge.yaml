@@ -1,0 +1,86 @@
+# values-challenge.yaml — resource profile for the 24 GB RAM Oracle Cloud cluster
+# Apply with: helm upgrade n8n ./charts/n8n -f charts/values/values-challenge.yaml
+
+global:
+  domain: "TODO: your-domain.example.com"   # Cloudflare proxied domain
+  imageTag: "1.47.1"                         # TODO: pin to tested version
+
+# ── n8n Main ──────────────────────────────────────────────────────────────
+main:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    tls:
+      - secretName: n8n-tls
+        hosts:
+          - "TODO: your-domain.example.com"
+
+# ── n8n Webhook ───────────────────────────────────────────────────────────
+webhook:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "150m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ── n8n Worker ────────────────────────────────────────────────────────────
+worker:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+# ── PostgreSQL ────────────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  primary:
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+    persistence:
+      enabled: true
+      size: 20Gi
+
+# ── Redis ─────────────────────────────────────────────────────────────────
+redis:
+  enabled: true
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ── Prometheus metrics annotations ────────────────────────────────────────
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "5678"
+  prometheus.io/path: "/metrics"

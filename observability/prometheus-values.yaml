@@ -1,0 +1,69 @@
+# Custom values for kube-prometheus-stack
+# helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#   -n monitoring --create-namespace -f observability/prometheus-values.yaml
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+    # Scrape n8n pods via annotations
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+grafana:
+  adminPassword: "TODO: set-via-sealed-secret-or-external-secret"
+  persistence:
+    enabled: true
+    size: 5Gi
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: custom
+          folder: "n8n Platform"
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/custom
+  # TODO: Mount grafana-dashboards/ JSONs via ConfigMap
+
+alertmanager:
+  config:
+    route:
+      receiver: slack
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+    receivers:
+      - name: slack
+        slack_configs:
+          - api_url: "TODO: slack-webhook-url-via-secret"
+            channel: "#alerts-n8n"
+            title: "{{ .GroupLabels.alertname }}"
+            text: "{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}"
+
+# Custom alert rules
+additionalPrometheusRulesMap:
+  n8n-rules:
+    groups:
+      - name: n8n
+        rules:
+          - alert: N8nHighErrorRate
+            expr: rate(n8n_workflow_executions_total{status="error"}[5m]) / rate(n8n_workflow_executions_total[5m]) > 0.05
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "n8n error rate > 5% for 2 minutes"
+          - alert: N8nWorkerQueueDepth
+            expr: n8n_bull_queue_waiting > 50
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "n8n worker queue depth > 50 jobs"
