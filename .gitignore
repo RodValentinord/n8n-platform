@@ -13,3 +13,7 @@ charts/*/charts/
 
 # Local memory / notes
 MEMORIA/
+
+# Kubeconfig local (credenciais do cluster — não comitar)
+kubeconfig-lens.yaml
+LENS.md
