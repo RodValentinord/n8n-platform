@@ -6,7 +6,7 @@
 global:
   environment: prod
   image:
-    tag: "1.47.1"
+    tag: "2.9.4"
   host: n8n.rvalentino.com
   protocol: https
 

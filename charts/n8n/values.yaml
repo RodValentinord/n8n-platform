@@ -7,7 +7,7 @@ global:
   environment: prod
   image:
     repository: n8nio/n8n
-    tag: "1.47.1"
+    tag: "2.9.4"
     pullPolicy: IfNotPresent
 
   # Domínio público — proxy Cloudflare + cert-manager
@@ -48,7 +48,7 @@ config:
     pruneMaxAge: "48"
     pruneMaxCount: "50000"
   # queue mode: "database" armazena binários no PostgreSQL (workers não têm acesso ao FS do main)
-  binaryDataMode: "database"
+  binaryDataMode: "default"
   performance:
     nodeOptions: "--max-old-space-size=768"
   metrics:

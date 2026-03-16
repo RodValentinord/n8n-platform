@@ -6,8 +6,6 @@ metadata:
   name: n8n-canary-analysis
   namespace: n8n
 spec:
-  args:
-    - name: service-name
   metrics:
     - name: error-rate
       interval: 60s
