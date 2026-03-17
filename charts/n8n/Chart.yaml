@@ -2,7 +2,7 @@ apiVersion: v2
 name: n8n
 description: n8n workflow automation platform — queue mode with Main, Webhook and Worker separation
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "2.9.4"
 keywords:
   - n8n
