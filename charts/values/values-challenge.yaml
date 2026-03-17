@@ -3,6 +3,10 @@
 #        -n n8n --create-namespace \
 #        -f charts/values/values-challenge.yaml
 
+# Secret com credenciais criado manualmente no cluster (não gerenciado pelo Helm).
+# Impede que helm upgrade sobrescreva os valores com strings vazias.
+existingSecret: "n8n-secrets"
+
 global:
   environment: prod
   image:
