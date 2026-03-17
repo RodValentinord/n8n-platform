@@ -28,7 +28,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-postgresql.*\"}",
+              "expr": "kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-postgresql.*\",condition=\"true\"}",
               "legendFormat": "ready",
               "instant": true
             }
@@ -44,7 +44,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-redis.*\"}",
+              "expr": "kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-redis.*\",condition=\"true\"}",
               "legendFormat": "ready",
               "instant": true
             }

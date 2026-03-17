@@ -28,7 +28,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-main.*\",condition=\"true\"}) or vector(0)",
+              "expr": "sum(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-main.*\",condition=\"true\"}) or vector(0)",
               "legendFormat": "stable ready"
             }
           ],
@@ -43,7 +43,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-webhook.*\",condition=\"true\"}) or vector(0)",
+              "expr": "sum(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-webhook.*\",condition=\"true\"}) or vector(0)",
               "legendFormat": "ready"
             }
           ],
@@ -58,7 +58,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-worker.*\",condition=\"true\"}) or vector(0)",
+              "expr": "sum(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-worker.*\",condition=\"true\"}) or vector(0)",
               "legendFormat": "ready"
             }
           ],
@@ -73,7 +73,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"true\"}) or vector(0)",
+              "expr": "sum(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"true\"}) or vector(0)",
               "legendFormat": "total ready"
             }
           ],
@@ -88,7 +88,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"false\"}) or vector(0)",
+              "expr": "sum(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"false\"}) or vector(0)",
               "legendFormat": "not ready"
             }
           ],
@@ -119,7 +119,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count by (pod) (kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"true\"})",
+              "expr": "sum by (pod) (kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"true\"})",
               "legendFormat": "{{pod}}"
             }
           ],
