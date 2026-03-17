@@ -1,5 +1,17 @@
 # deploy.yaml — CI/CD pipeline for n8n platform
-# Triggers: push to main branch (or manual dispatch)
+# Triggers: push to main (mudanças em charts/argo-rollouts/observability) ou dispatch manual
+#
+# Secrets necessários no repositório:
+#   SSH_HOST            — IP público do n8n-server (163.176.36.47)
+#   SSH_PRIVATE_KEY     — conteúdo de ~/.ssh/id_ed25519
+#   TELEGRAM_BOT_TOKEN  — token do bot @N8nselfhostbot
+#   TELEGRAM_CHAT_ID    — chat_id do grupo de alertas
+#
+# Por que SSH e não kubeconfig direto?
+#   A porta 6443 do K3s está restrita ao tráfego interno da VCN (10.0.0.0/16).
+#   Runners do GitHub Actions não conseguem alcançar o cluster diretamente.
+#   Solução: copiar os charts via SCP e rodar o helm upgrade no próprio server node,
+#   onde o kubeconfig já está configurado em /etc/rancher/k3s/k3s.yaml.
 
 name: Deploy n8n Platform
 
@@ -11,16 +23,10 @@ on:
       - "argo-rollouts/**"
       - "observability/**"
   workflow_dispatch:
-    inputs:
-      environment:
-        description: "Target environment"
-        required: true
-        default: "production"
 
 env:
-  HELM_VERSION: "3.14.0"
-  KUBECTL_VERSION: "1.29.3"
   NAMESPACE: "n8n"
+  DEPLOY_PATH: "/tmp/n8n-deploy-${{ github.run_id }}"
 
 jobs:
   lint:
@@ -32,55 +38,93 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: ${{ env.HELM_VERSION }}
+          version: "3.20.1"
 
       - name: Helm lint
         run: helm lint ./charts/n8n -f ./charts/values/values-challenge.yaml
 
   deploy:
-    name: Deploy via Helm
+    name: Deploy via SSH
     runs-on: ubuntu-latest
     needs: lint
     environment: production
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Helm
-        uses: azure/setup-helm@v4
+      - name: Copiar charts para o server
+        uses: appleboy/scp-action@v0.1.7
         with:
-          version: ${{ env.HELM_VERSION }}
+          host: ${{ secrets.SSH_HOST }}
+          username: opc
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "charts/,argo-rollouts/,observability/"
+          target: ${{ env.DEPLOY_PATH }}
 
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
+      - name: Helm upgrade + watch rollout
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          version: v${{ env.KUBECTL_VERSION }}
+          host: ${{ secrets.SSH_HOST }}
+          username: opc
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 15m
+          script: |
+            set -e
 
-      # TODO: Choose auth method — kubeconfig via secret or SSH tunnel
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
 
-      - name: Helm upgrade (n8n)
-        run: |
-          helm upgrade n8n ./charts/n8n \
-            --install \
-            --namespace ${{ env.NAMESPACE }} \
-            --create-namespace \
-            -f charts/values/values-challenge.yaml \
-            --set global.image.tag=${{ github.sha }} \
-            --wait \
-            --timeout 5m
+            echo "==> helm upgrade n8n"
+            helm upgrade n8n "${DEPLOY_PATH}/charts/n8n" \
+              --install \
+              --namespace ${{ env.NAMESPACE }} \
+              -f "${DEPLOY_PATH}/charts/values/values-challenge.yaml" \
+              --wait \
+              --timeout 5m
 
-      - name: Install Argo Rollouts plugin
-        run: |
-          curl -LO https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64
-          chmod +x kubectl-argo-rollouts-linux-amd64
-          sudo mv kubectl-argo-rollouts-linux-amd64 /usr/local/bin/kubectl-argo-rollouts
+            echo "==> Aplicando AnalysisTemplate"
+            kubectl apply -f "${DEPLOY_PATH}/argo-rollouts/analysis-templates.yaml"
 
-      - name: Watch rollout status
+            echo "==> Aguardando rollout: n8n-main"
+            kubectl argo rollouts status n8n-main -n ${{ env.NAMESPACE }} --timeout 10m
+
+            echo "==> Aguardando rollout: n8n-webhook"
+            kubectl argo rollouts status n8n-webhook -n ${{ env.NAMESPACE }} --timeout 5m
+
+            echo "==> Aguardando rollout: n8n-worker"
+            kubectl argo rollouts status n8n-worker -n ${{ env.NAMESPACE }} --timeout 5m
+
+            echo "==> Limpando arquivos temporários"
+            rm -rf "${DEPLOY_PATH}"
+
+  notify:
+    name: Notificar Telegram
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always()
+    steps:
+      - name: Enviar resultado
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATUS: ${{ needs.deploy.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          kubectl argo rollouts status n8n-main -n ${{ env.NAMESPACE }} --timeout 10m
-          kubectl argo rollouts status n8n-webhook -n ${{ env.NAMESPACE }} --timeout 5m
-          kubectl argo rollouts status n8n-worker -n ${{ env.NAMESPACE }} --timeout 5m
+          if [ "$STATUS" = "success" ]; then
+            ICON="✅"
+            TEXT="Deploy concluído com sucesso"
+          else
+            ICON="❌"
+            TEXT="Deploy FALHOU"
+          fi
+
+          MESSAGE="${ICON} *n8n Platform — ${TEXT}*
+          Commit: \`${COMMIT_SHA:0:7}\` — ${COMMIT_MSG}
+          [Ver pipeline](${RUN_URL})"
+
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview="true" \
+            -d text="${MESSAGE}"
