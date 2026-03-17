@@ -84,35 +84,117 @@ grafana:
         # que não existe no Loki 2.6.1). Queries LogQL normais não são afetadas.
         disableGrafanaMetaQuery: true
 
-# Alertmanager: alertas ficam no próprio Alertmanager (UI). Depois podemos adicionar email ou Telegram.
 alertmanager:
   config:
     route:
-      receiver: default
+      receiver: telegram
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 4h
+      # Alertas críticos de infra chegam imediatamente, sem agrupar
+      routes:
+        - match:
+            severity: critical
+          receiver: telegram
+          group_wait: 10s
+          repeat_interval: 1h
+        - match:
+            severity: warning
+          receiver: telegram
+          group_wait: 30s
+          repeat_interval: 4h
     receivers:
-      - name: default
-        # Sem integração externa por enquanto; depois: email ou Telegram
+      - name: telegram
+        telegram_configs:
+          - bot_token: "8624967149:AAECrEpRwx6nTb3_VkCYiSjyfOKCG7YtmdM"
+            chat_id: 651152284
+            parse_mode: HTML
+            message: |
+              {{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} <b>{{ .CommonLabels.alertname }}</b>
+              <b>Severity:</b> {{ .CommonLabels.severity }}
+              {{ range .Alerts }}
+              <b>Resumo:</b> {{ .Annotations.summary }}
+              <b>Detalhes:</b> {{ .Annotations.description }}
+              {{ end }}
 
 # Custom alert rules
 additionalPrometheusRulesMap:
   n8n-rules:
     groups:
+      # --- Camada 1: Infraestrutura ---
+      - name: infra
+        rules:
+          - alert: PodCrashLoopBackOff
+            expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} em CrashLoopBackOff"
+              description: "Container {{ $labels.container }} reiniciou mais de 3x nos últimos 15 minutos."
+
+          - alert: NodeCPUHigh
+            expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "CPU alta no nó {{ $labels.instance }}"
+              description: "CPU acima de 80% por mais de 5 minutos. Valor atual: {{ printf \"%.1f\" $value }}%"
+
+          - alert: NodeNotReady
+            expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Nó {{ $labels.node }} NotReady"
+              description: "O nó saiu do estado Ready há mais de 2 minutos. Verificar kubelet e conectividade."
+
+          - alert: NodeMemoryLow
+            expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 15
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Memória baixa no nó {{ $labels.instance }}"
+              description: "Memória disponível abaixo de 15%. Valor atual: {{ printf \"%.1f\" $value }}%"
+
+          - alert: NodeDiskHigh
+            expr: (1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})) * 100 > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Disco alto no nó {{ $labels.instance }}"
+              description: "Uso de disco acima de 80% em /. Valor atual: {{ printf \"%.1f\" $value }}%"
+
+      # --- Camada 2: Aplicação n8n ---
       - name: n8n
         rules:
           - alert: N8nHighErrorRate
-            expr: rate(n8n_workflow_executions_total{status="error"}[5m]) / rate(n8n_workflow_executions_total[5m]) > 0.05
+            expr: sum(rate(n8n_workflow_executions_total{status="error"}[5m])) / sum(rate(n8n_workflow_executions_total[5m])) > 0.05
             for: 2m
             labels:
               severity: warning
             annotations:
-              summary: "n8n error rate > 5% for 2 minutes"
+              summary: "n8n error rate acima de 5%"
+              description: "Taxa de erro de workflows acima de 5% por 2 minutos."
+
           - alert: N8nWorkerQueueDepth
             expr: n8n_bull_queue_waiting > 50
             for: 5m
             labels:
               severity: warning
             annotations:
-              summary: "n8n worker queue depth > 50 jobs"
+              summary: "Fila do n8n worker acima de 50 jobs"
+              description: "{{ $value }} jobs aguardando na fila. Workers podem estar sobrecarregados."
+
+          - alert: N8nNoLeader
+            expr: sum(n8n_instance_role_leader) == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "n8n sem líder eleito"
+              description: "Nenhum pod main assumiu o papel de líder. Triggers de schedule e eventos não vão disparar."
