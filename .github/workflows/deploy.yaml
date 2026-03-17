@@ -66,35 +66,50 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: opc
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 15m
+          command_timeout: 30m
           script: |
             set -e
-
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
             DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
 
+            # Fix 3: trap garante limpeza mesmo se o script falhar no meio
+            trap 'rm -rf "${DEPLOY_PATH}"' EXIT
+
+            # Fix 1: sem --wait — Helm apenas entrega os manifestos ao K8s.
+            # A responsabilidade de aguardar o canary é do kubectl argo rollouts status abaixo.
+            # Fix 2: AnalysisTemplate agora está dentro do chart (templates/analysis-template.yaml)
+            #        e é aplicada pelo próprio helm upgrade — sem mais dependência de ordem.
             echo "==> helm upgrade n8n"
             helm upgrade n8n "${DEPLOY_PATH}/charts/n8n" \
               --install \
               --namespace ${{ env.NAMESPACE }} \
-              -f "${DEPLOY_PATH}/charts/values/values-challenge.yaml" \
-              --wait \
-              --timeout 5m
+              -f "${DEPLOY_PATH}/charts/values/values-challenge.yaml"
 
-            echo "==> Aplicando AnalysisTemplate"
-            kubectl apply -f "${DEPLOY_PATH}/argo-rollouts/analysis-templates.yaml"
-
-            echo "==> Aguardando rollout: n8n-main"
-            kubectl argo rollouts status n8n-main -n ${{ env.NAMESPACE }} --timeout 10m
+            echo "==> Aguardando rollout: n8n-main (canary: 20% → análise 5min → 50% → pause 2min → 100%)"
+            kubectl argo rollouts status n8n-main -n ${{ env.NAMESPACE }} --timeout 20m
 
             echo "==> Aguardando rollout: n8n-webhook"
-            kubectl argo rollouts status n8n-webhook -n ${{ env.NAMESPACE }} --timeout 5m
+            kubectl argo rollouts status n8n-webhook -n ${{ env.NAMESPACE }} --timeout 10m
 
             echo "==> Aguardando rollout: n8n-worker"
-            kubectl argo rollouts status n8n-worker -n ${{ env.NAMESPACE }} --timeout 5m
+            kubectl argo rollouts status n8n-worker -n ${{ env.NAMESPACE }} --timeout 10m
 
-            echo "==> Limpando arquivos temporários"
-            rm -rf "${DEPLOY_PATH}"
+      - name: Estado final dos rollouts
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: opc
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 1m
+          script: |
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            echo "====== n8n-main ======"
+            kubectl argo rollouts get rollout n8n-main -n ${{ env.NAMESPACE }} 2>&1 | head -20
+            echo "====== n8n-webhook ======"
+            kubectl argo rollouts get rollout n8n-webhook -n ${{ env.NAMESPACE }} 2>&1 | head -10
+            echo "====== n8n-worker ======"
+            kubectl argo rollouts get rollout n8n-worker -n ${{ env.NAMESPACE }} 2>&1 | head -10
 
   notify:
     name: Notificar Telegram

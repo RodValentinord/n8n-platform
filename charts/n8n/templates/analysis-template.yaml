@@ -1,0 +1,30 @@
+# AnalysisTemplate — gerenciada pelo Helm junto com o chart.
+# Queries Prometheus para validar error rate e latência antes de promover o canary.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: n8n-canary-analysis
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+spec:
+  metrics:
+    - name: error-rate
+      interval: 60s
+      count: 5
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
+          query: sum(rate(n8n_workflow_executions_total{status="error"}[2m])) / sum(rate(n8n_workflow_executions_total[2m]))
+      successCondition: len(result) == 0 || result[0] < 0.05
+
+    - name: p99-event-loop-lag
+      interval: 60s
+      count: 5
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
+          query: max(n8n_nodejs_eventloop_lag_p99_seconds)
+      successCondition: len(result) == 0 || result[0] < 0.5
