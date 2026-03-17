@@ -85,6 +85,15 @@ ingress:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 
+# ── Scheduling — restringir aos agent nodes (control plane não roda workloads) ─
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-role.kubernetes.io/control-plane
+              operator: DoesNotExist
+
 # ── Backup ────────────────────────────────────────────────────────────────────
 # Habilitar após provisionar o bucket OCI e criar a PAR URL.
 # Ver: MEMORIA/memoria.md > Pendências

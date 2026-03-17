@@ -80,6 +80,11 @@ serviceAnnotations: {}
 podAnnotations: {}
 
 # ──────────────────────────────────────────────
+# Affinity global — aplicada a todos os componentes n8n
+# ──────────────────────────────────────────────
+affinity: {}
+
+# ──────────────────────────────────────────────
 # n8n Main (UI + API + Scheduler)
 # ──────────────────────────────────────────────
 main:
