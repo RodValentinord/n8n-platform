@@ -10,7 +10,7 @@ existingSecret: "n8n-secrets"
 global:
   environment: prod
   image:
-    tag: "2.9.4"
+    tag: "2.9.3"
   host: n8n.rvalentino.com
   protocol: https
 
