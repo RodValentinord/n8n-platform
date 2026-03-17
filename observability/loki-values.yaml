@@ -7,21 +7,23 @@ loki:
     enabled: true
     size: 10Gi
   config:
+    server:
+      http_listen_address: 0.0.0.0
+      grpc_listen_address: 0.0.0.0
     limits_config:
       retention_period: 168h  # 7 days
 
+# Promtail: o chart já descobre logs de todos os pods (kubernetes_sd_configs).
+# Pipeline customizado para n8n (JSON, labels) pode ser adicionado depois
+# com um scrape_config completo (target + pipeline_stages).
 promtail:
-  config:
-    snippets:
-      extraScrapeConfigs: |
-        # Extra pipeline for n8n logs — parse JSON and extract workflow_id
-        - job_name: n8n
-          pipeline_stages:
-            - docker: {}
-            - json:
-                expressions:
-                  level: level
-                  workflow_id: workflowId
-            - labels:
-                level:
-                workflow_id:
+  config: {}
+
+# O loki-stack cria um ConfigMap "loki-loki-stack" com label grafana_datasource: "1"
+# e isDefault: true — conflita com Prometheus (também isDefault: true no kube-prometheus-stack).
+# Solução: remover o label grafana_datasource do CM "loki-loki-stack" após cada helm upgrade loki
+# (kubectl label cm loki-loki-stack -n monitoring grafana_datasource-)
+# e gerenciar o datasource do Loki via additionalDataSources no prometheus-values.yaml.
+# grafana.enabled: false desabilita o sub-chart Grafana bundled no loki-stack (não usamos ele).
+grafana:
+  enabled: false

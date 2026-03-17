@@ -17,10 +17,40 @@ prometheus:
     serviceMonitorSelectorNilUsesHelmValues: false
 
 grafana:
-  adminPassword: "TODO: set-via-sealed-secret-or-external-secret"
+  # Definir na instalação: --set grafana.adminPassword='<senha>' (ver credenciais-oci.txt)
+  adminPassword: "CHANGE_ME"
   persistence:
     enabled: true
     size: 5Gi
+  # initChownData causa "Permission denied" no PV local-path do K3s ao fazer upgrade
+  # O dado já existe no PVC com as permissões corretas do deploy anterior
+  initChownData:
+    enabled: false
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.rvalentino.com
+    path: /
+    pathType: Prefix
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.rvalentino.com
+  grafana.ini:
+    server:
+      root_url: "https://grafana.rvalentino.com"
+      serve_from_sub_path: false
+  # Diretório custom precisa existir; senão Grafana enche o log de "no such file or directory"
+  # emptyDir garante que o diretório existe mesmo sem dashboards montados via ConfigMap
+  extraVolumes:
+    - name: dashboards-custom
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: dashboards-custom
+      mountPath: /var/lib/grafana/dashboards/custom
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
@@ -31,21 +61,32 @@ grafana:
           options:
             path: /var/lib/grafana/dashboards/custom
   # TODO: Mount grafana-dashboards/ JSONs via ConfigMap
+  # Loki datasource: gerenciado aqui porque o sub-chart Grafana do loki-stack está desabilitado
+  # (grafana.enabled: false em loki-values.yaml evita conflito de isDefault com o Prometheus)
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+      jsonData:
+        maxLines: 1000
+        # Desabilita o log-volume histogram do Grafana 12 (usa `| drop __error__`
+        # que não existe no Loki 2.6.1). Queries LogQL normais não são afetadas.
+        disableGrafanaMetaQuery: true
 
+# Alertmanager: alertas ficam no próprio Alertmanager (UI). Depois podemos adicionar email ou Telegram.
 alertmanager:
   config:
     route:
-      receiver: slack
+      receiver: default
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 4h
     receivers:
-      - name: slack
-        slack_configs:
-          - api_url: "TODO: slack-webhook-url-via-secret"
-            channel: "#alerts-n8n"
-            title: "{{ .GroupLabels.alertname }}"
-            text: "{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}"
+      - name: default
+        # Sem integração externa por enquanto; depois: email ou Telegram
 
 # Custom alert rules
 additionalPrometheusRulesMap:
