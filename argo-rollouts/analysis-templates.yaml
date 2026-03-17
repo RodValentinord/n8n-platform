@@ -1,52 +1,24 @@
-# AnalysisTemplate — used by the n8n main Rollout to gate canary progression.
-# Queries Prometheus to validate error rate and latency before promoting.
-apiVersion: argoproj.io/v1alpha1
-kind: AnalysisTemplate
-metadata:
-  name: n8n-canary-analysis
-  namespace: n8n
-spec:
-  metrics:
-    - name: error-rate
-      interval: 60s
-      count: 5           # 5 medições consecutivas bem-sucedidas para promover
-      failureLimit: 1
-      provider:
-        prometheus:
-          address: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
-          query: sum(rate(n8n_workflow_executions_total{status="error"}[2m])) / sum(rate(n8n_workflow_executions_total[2m]))
-      # len(result)==0 cobre o caso de não haver execuções (divisão retorna NaN/sem dados)
-      successCondition: len(result) == 0 || result[0] < 0.05
-
-    - name: p99-event-loop-lag
-      interval: 60s
-      count: 5
-      failureLimit: 1
-      provider:
-        prometheus:
-          address: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
-          # n8n não expõe http_request_duration_seconds — usa event loop lag p99 como proxy de latência
-          query: max(n8n_nodejs_eventloop_lag_p99_seconds)
-      successCondition: len(result) == 0 || result[0] < 0.5    # p99 < 500 ms
-
----
-# TODO: Create a Rollout resource referencing this AnalysisTemplate.
-# Example skeleton below:
+# ATENÇÃO: Este arquivo foi migrado para o Helm chart.
 #
-# apiVersion: argoproj.io/v1alpha1
-# kind: Rollout
-# metadata:
-#   name: n8n-main
-#   namespace: n8n
-# spec:
-#   replicas: 2
-#   strategy:
-#     canary:
-#       steps:
-#         - setWeight: 20
-#         - analysis:
-#             templates:
-#               - templateName: n8n-canary-analysis
-#         - setWeight: 50
-#         - pause: {duration: 5m}
-#         - setWeight: 100
+# A AnalysisTemplate "n8n-canary-analysis" agora é gerenciada em:
+#   charts/n8n/templates/analysis-template.yaml
+#
+# Este arquivo é mantido apenas como referência histórica.
+# NÃO aplicar manualmente via kubectl — o helm upgrade já gerencia o ciclo de vida.
+#
+# ── Migração one-time (já executada) ─────────────────────────────────────────
+# Quando um recurso existe no cluster criado via kubectl apply e você quer passar
+# a gerenciá-lo pelo Helm, é necessário adicionar as labels/annotations de ownership
+# antes do primeiro helm upgrade que inclui o recurso:
+#
+#   kubectl annotate analysistemplate n8n-canary-analysis -n n8n \
+#     meta.helm.sh/release-name=n8n \
+#     meta.helm.sh/release-namespace=n8n \
+#     --overwrite
+#
+#   kubectl label analysistemplate n8n-canary-analysis -n n8n \
+#     app.kubernetes.io/managed-by=Helm \
+#     --overwrite
+#
+# Sem isso, o Helm recusa o upgrade com "cannot be imported into the current release".
+# ─────────────────────────────────────────────────────────────────────────────
