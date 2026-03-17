@@ -1,0 +1,291 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-n8n-overview
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "n8n Platform"
+data:
+  n8n-overview.json: |
+    {
+      "uid": "n8n-overview",
+      "title": "n8n Overview",
+      "description": "Métricas da aplicação n8n — workflows, filas, recursos e logs. Requer PodMonitor aplicado para métricas de aplicação.",
+      "tags": ["n8n", "application"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "component",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "query": "label_values(kube_pod_info{namespace=\"n8n\"}, pod)",
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "label": "Pod"
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Pods n8n Running",
+          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_phase{namespace=\"n8n\",phase=\"Running\"})",
+              "legendFormat": "Running"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "yellow","value": null},{"color": "green","value": 5}] } } }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Workflows Ativos",
+          "description": "Requer PodMonitor aplicado",
+          "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(n8n_active_workflow_count) or vector(0)",
+              "legendFormat": "Ativos"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "blue","value": null}] } } }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Execuções (último 5m)",
+          "description": "Requer PodMonitor aplicado",
+          "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(n8n_workflow_executions_total[5m])) or vector(0)",
+              "legendFormat": "exec/s"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+          "fieldConfig": { "defaults": { "unit": "ops", "thresholds": { "mode": "absolute", "steps": [{"color": "blue","value": null}] } } }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Error Rate (último 5m)",
+          "description": "Requer PodMonitor aplicado",
+          "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(n8n_workflow_executions_total{status=\"error\"}[5m])) / sum(rate(n8n_workflow_executions_total[5m])) * 100 or vector(0)",
+              "legendFormat": "error %"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{"color": "green","value": null},{"color": "yellow","value": 1},{"color": "red","value": 5}] } } }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Restarts (última hora)",
+          "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"n8n\"}[1h])) or vector(0)",
+              "legendFormat": "Restarts"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "green","value": null},{"color": "yellow","value": 1},{"color": "red","value": 5}] } } }
+        },
+        {
+          "id": 6,
+          "type": "stat",
+          "title": "Leader Main",
+          "description": "Requer PodMonitor aplicado",
+          "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(n8n_instance_role_leader) or vector(0)",
+              "legendFormat": "leader"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "mappings": [{"type":"value","options":{"0":{"text":"Sem líder","color":"red"},"1":{"text":"OK","color":"green"}}}], "thresholds": { "mode": "absolute", "steps": [{"color": "red","value": null},{"color": "green","value": 1}] } } }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "CPU por Componente n8n",
+          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"n8n\",container!=\"\",container!=\"POD\"}[5m]))",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2, "fillOpacity": 5 }
+            }
+          },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Memória por Componente n8n",
+          "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"n8n\",container!=\"\",container!=\"POD\"})",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "lineWidth": 2, "fillOpacity": 5 }
+            }
+          }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Event Loop Lag p99 (ms)",
+          "description": "Requer PodMonitor aplicado. Alta latência indica gargalo no processo Node.js.",
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "n8n_nodejs_eventloop_lag_p99_seconds * 1000",
+              "legendFormat": "{{pod}} p99"
+            },
+            {
+              "expr": "n8n_nodejs_eventloop_lag_p50_seconds * 1000",
+              "legendFormat": "{{pod}} p50"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "custom": { "lineWidth": 2 },
+              "thresholds": { "mode": "absolute", "steps": [{"color": "green","value": null},{"color": "yellow","value": 100},{"color": "red","value": 500}] }
+            }
+          }
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Heap Node.js (usado / total)",
+          "description": "Requer PodMonitor aplicado.",
+          "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "n8n_nodejs_heap_size_used_bytes",
+              "legendFormat": "{{pod}} usado"
+            },
+            {
+              "expr": "n8n_nodejs_heap_size_total_bytes",
+              "legendFormat": "{{pod}} total"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "lineWidth": 2, "fillOpacity": 5 }
+            }
+          }
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "Execuções por Status",
+          "description": "Requer PodMonitor aplicado.",
+          "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (status) (rate(n8n_workflow_executions_total[5m]))",
+              "legendFormat": "{{status}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "error" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+              { "matcher": { "id": "byName", "options": "success" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+            ]
+          }
+        },
+        {
+          "id": 12,
+          "type": "logs",
+          "title": "Logs n8n (erros)",
+          "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "{namespace=\"n8n\"} |= \"error\"",
+              "legendFormat": ""
+            }
+          ],
+          "options": {
+            "dedupStrategy": "none",
+            "showLabels": false,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          }
+        },
+        {
+          "id": 13,
+          "type": "table",
+          "title": "Status dos Pods n8n",
+          "gridPos": { "x": 0, "y": 28, "w": 24, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "kube_pod_info{namespace=\"n8n\"}",
+              "instant": true,
+              "format": "table",
+              "legendFormat": ""
+            },
+            {
+              "expr": "kube_pod_container_status_restarts_total{namespace=\"n8n\"}",
+              "instant": true,
+              "format": "table",
+              "legendFormat": ""
+            }
+          ],
+          "transformations": [
+            { "id": "labelsToFields", "options": {} },
+            { "id": "filterFieldsByName", "options": { "include": { "names": ["pod","node","container","Value #B"] } } },
+            { "id": "organize", "options": { "renameByName": { "Value #B": "restarts" } } }
+          ]
+        }
+      ]
+    }

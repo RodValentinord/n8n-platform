@@ -17,3 +17,4 @@ MEMORIA/
 # Kubeconfig local (credenciais do cluster — não comitar)
 kubeconfig-lens.yaml
 LENS.md
+BLOCO-5-PASSOS.md

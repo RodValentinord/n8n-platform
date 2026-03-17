@@ -1,0 +1,37 @@
+# PodMonitor para scraping das métricas do n8n pelo Prometheus
+# Aplica em todos os pods do namespace n8n que tenham a annotation prometheus.io/scrape: "true"
+# e porta 5678 (porta interna do n8n)
+#
+# Aplicar: kubectl apply -f observability/n8n-podmonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: n8n
+  namespace: monitoring
+  labels:
+    app: n8n
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - n8n
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [n8n]
+      # webhook não inicializa o servidor de métricas do n8n — retorna 404
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values: [webhook]
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+          targetLabel: component
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace

@@ -1,0 +1,223 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-postgres-redis
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "n8n Platform"
+data:
+  postgres-redis.json: |
+    {
+      "uid": "postgres-redis",
+      "title": "PostgreSQL + Redis",
+      "description": "Recursos dos pods de banco de dados via cadvisor. Métricas SQL/Redis-level requerem exporters (bitnami metrics.enabled: true).",
+      "tags": ["n8n", "database", "postgresql", "redis"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "PostgreSQL Status",
+          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-postgresql.*\"}",
+              "legendFormat": "ready",
+              "instant": true
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "mappings": [{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}], "thresholds": { "mode": "absolute", "steps": [{"color": "red","value": null},{"color": "green","value": 1}] } } }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Redis Status",
+          "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-redis.*\"}",
+              "legendFormat": "ready",
+              "instant": true
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "mappings": [{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}], "thresholds": { "mode": "absolute", "steps": [{"color": "red","value": null},{"color": "green","value": 1}] } } }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Restarts PostgreSQL (1h)",
+          "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"n8n\",pod=~\"n8n-postgresql.*\"}[1h])) or vector(0)",
+              "legendFormat": "restarts"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "green","value": null},{"color": "red","value": 1}] } } }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Restarts Redis (1h)",
+          "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"n8n\",pod=~\"n8n-redis.*\"}[1h])) or vector(0)",
+              "legendFormat": "restarts"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "green","value": null},{"color": "red","value": 1}] } } }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "CPU — PostgreSQL",
+          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"n8n\",pod=~\"n8n-postgresql.*\",container!=\"\",container!=\"POD\"}[5m])",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 },
+              "color": { "mode": "fixed", "fixedColor": "blue" }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "CPU — Redis",
+          "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"n8n\",pod=~\"n8n-redis.*\",container!=\"\",container!=\"POD\"}[5m])",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 },
+              "color": { "mode": "fixed", "fixedColor": "red" }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Memória — PostgreSQL",
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "container_memory_working_set_bytes{namespace=\"n8n\",pod=~\"n8n-postgresql.*\",container!=\"\",container!=\"POD\"}",
+              "legendFormat": "{{pod}} working set"
+            },
+            {
+              "expr": "container_memory_rss{namespace=\"n8n\",pod=~\"n8n-postgresql.*\",container!=\"\",container!=\"POD\"}",
+              "legendFormat": "{{pod}} RSS"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "lineWidth": 2, "fillOpacity": 5 }
+            }
+          }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Memória — Redis",
+          "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "container_memory_working_set_bytes{namespace=\"n8n\",pod=~\"n8n-redis.*\",container!=\"\",container!=\"POD\"}",
+              "legendFormat": "{{pod}} working set"
+            },
+            {
+              "expr": "container_memory_rss{namespace=\"n8n\",pod=~\"n8n-redis.*\",container!=\"\",container!=\"POD\"}",
+              "legendFormat": "{{pod}} RSS"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "lineWidth": 2, "fillOpacity": 5 }
+            }
+          }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Network I/O — PostgreSQL + Redis",
+          "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(container_network_receive_bytes_total{namespace=\"n8n\",pod=~\"n8n-postgresql.*|n8n-redis.*\"}[5m])",
+              "legendFormat": "{{pod}} rx"
+            },
+            {
+              "expr": "rate(container_network_transmit_bytes_total{namespace=\"n8n\",pod=~\"n8n-postgresql.*|n8n-redis.*\"}[5m])",
+              "legendFormat": "{{pod}} tx"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": { "lineWidth": 2 }
+            }
+          }
+        },
+        {
+          "id": 10,
+          "type": "logs",
+          "title": "Logs PostgreSQL",
+          "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "{namespace=\"n8n\", pod=~\"n8n-postgresql.*\"}",
+              "legendFormat": ""
+            }
+          ],
+          "options": { "dedupStrategy": "none", "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true }
+        },
+        {
+          "id": 11,
+          "type": "logs",
+          "title": "Logs Redis",
+          "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "{namespace=\"n8n\", pod=~\"n8n-redis.*\"}",
+              "legendFormat": ""
+            }
+          ],
+          "options": { "dedupStrategy": "none", "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true }
+        }
+      ]
+    }

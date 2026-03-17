@@ -39,6 +39,14 @@ grafana:
       - secretName: grafana-tls
         hosts:
           - grafana.rvalentino.com
+  sidecar:
+    dashboards:
+      # Annotation que o sidecar lê para determinar a pasta de destino no Grafana
+      # ConfigMaps com grafana_folder: "n8n Platform" vão para essa pasta
+      folderAnnotation: grafana_folder
+      provider:
+        # Lê a estrutura de subdiretórios criada pelo sidecar e mapeia para pastas no Grafana
+        foldersFromFilesStructure: true
   grafana.ini:
     server:
       root_url: "https://grafana.rvalentino.com"

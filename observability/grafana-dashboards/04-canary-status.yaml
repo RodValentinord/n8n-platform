@@ -1,0 +1,242 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-canary-status
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "n8n Platform"
+data:
+  canary-status.json: |
+    {
+      "uid": "canary-status",
+      "title": "Canary Deploy — Argo Rollouts",
+      "description": "Estado dos Rollouts do n8n: pods stable vs canary, recursos por revisão e logs de erro durante a progressão.",
+      "tags": ["n8n", "canary", "argo-rollouts"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "15s",
+      "time": { "from": "now-30m", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Pods main — Stable",
+          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-main.*\",condition=\"true\"}) or vector(0)",
+              "legendFormat": "stable ready"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "yellow","value": null},{"color": "green","value": 2}] } } }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Pods webhook — Ready",
+          "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-webhook.*\",condition=\"true\"}) or vector(0)",
+              "legendFormat": "ready"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "yellow","value": null},{"color": "green","value": 2}] } } }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Pods worker — Ready",
+          "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-worker.*\",condition=\"true\"}) or vector(0)",
+              "legendFormat": "ready"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "yellow","value": null},{"color": "green","value": 2}] } } }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Total Pods n8n Ready",
+          "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"true\"}) or vector(0)",
+              "legendFormat": "total ready"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "yellow","value": null},{"color": "green","value": 6}] } } }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Pods Not Ready",
+          "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"false\"}) or vector(0)",
+              "legendFormat": "not ready"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "green","value": null},{"color": "yellow","value": 1},{"color": "red","value": 3}] } } }
+        },
+        {
+          "id": 6,
+          "type": "stat",
+          "title": "Restarts (30min)",
+          "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\"}[30m])) or vector(0)",
+              "legendFormat": "restarts"
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "green","value": null},{"color": "yellow","value": 1},{"color": "red","value": 3}] } } }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Pods Ready ao Longo do Tempo (por componente)",
+          "description": "Durante um canary, você verá o número de pods oscilar enquanto o Argo Rollouts substitui stable → canary.",
+          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count by (pod) (kube_pod_status_ready{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",condition=\"true\"})",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2, "fillOpacity": 5 },
+              "min": 0
+            }
+          },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "CPU por Pod n8n (durante canary)",
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",container!=\"\",container!=\"POD\"}[2m])",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 1, "fillOpacity": 0 }
+            }
+          }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Memória por Pod n8n (durante canary)",
+          "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "container_memory_working_set_bytes{namespace=\"n8n\",pod=~\"n8n-(main|webhook|worker).*\",container!=\"\",container!=\"POD\"}",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "lineWidth": 1, "fillOpacity": 0 }
+            }
+          }
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Error Rate n8n — Análise de Canary",
+          "description": "Requer PodMonitor. A AnalysisTemplate do Argo consulta esta métrica para decidir promover ou abortar o canary.",
+          "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(n8n_workflow_executions_total{status=\"error\"}[5m])) / sum(rate(n8n_workflow_executions_total[5m])) * 100 or vector(0)",
+              "legendFormat": "error rate %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{"color": "green","value": null},{"color": "yellow","value": 1},{"color": "red","value": 5}] }
+            }
+          }
+        },
+        {
+          "id": 11,
+          "type": "logs",
+          "title": "Logs n8n — Erros durante Deploy",
+          "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "{namespace=\"n8n\", pod=~\"n8n-(main|webhook|worker).*\"} |= \"error\"",
+              "legendFormat": ""
+            }
+          ],
+          "options": { "dedupStrategy": "none", "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true }
+        },
+        {
+          "id": 12,
+          "type": "table",
+          "title": "Todos os Pods n8n — Estado Atual",
+          "gridPos": { "x": 0, "y": 28, "w": 24, "h": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "kube_pod_info{namespace=\"n8n\"}",
+              "instant": true,
+              "format": "table",
+              "legendFormat": ""
+            },
+            {
+              "expr": "kube_pod_container_status_restarts_total{namespace=\"n8n\"}",
+              "instant": true,
+              "format": "table",
+              "legendFormat": ""
+            },
+            {
+              "expr": "kube_pod_status_phase{namespace=\"n8n\"}",
+              "instant": true,
+              "format": "table",
+              "legendFormat": ""
+            }
+          ],
+          "transformations": [
+            { "id": "labelsToFields", "options": {} },
+            { "id": "filterFieldsByName", "options": { "include": { "names": ["pod","node","container","phase","Value #B"] } } },
+            { "id": "organize", "options": { "renameByName": { "Value #B": "restarts" } } },
+            { "id": "sortBy", "options": { "fields": [{"desc": false, "displayName": "pod"}] } }
+          ]
+        }
+      ]
+    }
